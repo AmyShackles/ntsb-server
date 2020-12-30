@@ -31,27 +31,12 @@ server.use(function (req, res, next) {
     next();
   }
 });
-server.get("/", (req, res) => res.send("API Running..."));
-server.listen(PORT, () => console.log(`\n\nAPI running on port ${PORT}`));
 
-function logErrors(err, req, res, next) {
-  console.error(err.stack);
-  next(err);
-}
 
-function errorHandler(err, req, res, next) {
-  if (res.headersSent) {
-    return next(err);
-  }
-  res.status(500).json({ error: err.message });
-}
+
 
 server.use("/api/accidents", accidentRouter);
 server.use("/api/incidents", incidentRouter);
-server.use(logErrors);
-server.use(errorHandler);
+server.get("/", (req, res) => res.send("API Running..."));
+server.listen(PORT, () => console.log(`\n\nAPI running on port ${PORT}`));
 
-process.on("uncaughtException", (error) => {
-  console.error(error);
-  process.exit(1);
-});
