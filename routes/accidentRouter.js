@@ -29,7 +29,12 @@ router.get("/makeList", async function (req, res, next) {
 router.get("/makeList/:make", async function (req, res, next) {
   const { make } = req.params;
   let makes = [];
-  let allMakes = await Accident.distinct("Make").exec().catch(next);
+  let allMakes = [];
+  try {
+    allMakes = await Accident.distinct("Make").exec();
+  } catch (err) {
+    console.error(err);
+  }
   allMakes.forEach((m) => {
     if (new RegExp(`^${make}`, "i").test(m)) {
       makes.push(m);
