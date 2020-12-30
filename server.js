@@ -23,6 +23,7 @@ mongoose.connect(mongoURI, connectOptions, (err, db) => {
 
 const server = express();
 server.use(express.json());
+server.use(cors({ origin: "http://localhost:3000" }));
 server.use(function (req, res, next) {
   if (req.method === "OPTIONS") {
     res.status(200).end();
@@ -30,9 +31,27 @@ server.use(function (req, res, next) {
     next();
   }
 });
+server.get("/", (req, res) => res.send("API Running..."));
+server.listen(PORT, () => console.log(`\n\nAPI running on port ${PORT}`));
+
+function logErrors(err, req, res, next) {
+  console.error(err.stack);
+  next(err);
+}
+
+function errorHandler(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({ error: err.message });
+}
 
 server.use("/api/accidents", accidentRouter);
 server.use("/api/incidents", incidentRouter);
+server.use(logErrors);
+server.use(errorHandler);
 
-server.get("/", (req, res) => res.send("API Running..."));
-server.listen(PORT, () => console.log(`\n\nAPI running on port ${PORT}`));
+process.on("uncaughtException", (error) => {
+  console.error(error);
+  process.exit(1);
+});
