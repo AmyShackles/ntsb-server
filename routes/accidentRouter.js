@@ -12,9 +12,14 @@ router.get("/modelList", async function (req, res, next) {
 router.get("/modelList/:model", async function (req, res, next) {
   const { model } = req.params;
   let models = [];
-  let allModels = await Accident.distinct("Model").exec().catch(next);
+  let allModels = [];
+  try {
+    allModels = await Accident.distinct("Model").exec();
+  } catch (err) {
+    console.error(err);
+  }
   allModels.forEach((m) => {
-    if (new RegExp(model, "i").test(m)) {
+    if (new RegExp(`^${model}`, "i").test(m)) {
       models.push(m);
     }
   });
