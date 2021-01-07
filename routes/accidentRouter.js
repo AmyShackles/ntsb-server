@@ -47,7 +47,22 @@ router.get("/makeList/:make", async function (req, res, next) {
   });
   res.status(200).json(makes);
 });
-
+router.get("/countryList/:country", async function (req, res) {
+  const { country } = req.params;
+  let countries = [];
+  let allCountries = [];
+  try {
+    allCountries = await Accident.distinct("Country").exec();
+  } catch (err) {
+    console.error(err);
+  }
+  allCountries.forEach((c) => {
+    if (new RegExp(`^${country}`, "i").test(c)) {
+      countries.push(c);
+    }
+  });
+  res.status(200).json(countries);
+});
 router.get("/cityList/:city", async function (req, res, next) {
   const { city } = req.params;
   let cities = [];
