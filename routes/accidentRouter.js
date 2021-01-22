@@ -2,6 +2,11 @@ const { Router } = require("express");
 const Accident = require("../models/Accident.js");
 const router = new Router();
 
+// Escape special characters and make them optional for search
+function escapeRegex(text) {
+  return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&\?");
+};
+
 router.route("/").get(getAccidents);
 
 router.get("/modelList", async function (req, res, next) {
@@ -10,68 +15,94 @@ router.get("/modelList", async function (req, res, next) {
 });
 
 router.get("/modelList/:model", async function (req, res, next) {
-  const { model } = req.params;
-  let models = [];
-  let allModels = [];
+    const { model } = req.params;
+    let models = [];
+    try {
+        models = await Accident.distinct("Model", {
+            Model: new RegExp(`^${escapeRegex(model)}`, "i"),
+        }).exec();
+    } catch (err) {
+        console.error(err);
+    }
+    res.status(200).json(models);
+});
+
+router.get("/category/:category", async function (req, res, next) {
+  const { category } = req.params;
+  let categories = [];
   try {
-    allModels = await Accident.distinct("Model").exec();
-  } catch (err) {
+    categories = await Accident.distinct("Make", { Aircraft_Category: new RegExp(`^${category}`, "i")}).exec();
+  } catch(err) {
     console.error(err);
   }
-  allModels.forEach((m) => {
-    if (new RegExp(`^${model}`, "i").test(m)) {
-      models.push(m);
+  res.status(200).json(categories)
+})
+
+router.get("/make_model", async function (req, res, next) {
+    let makeModels = await Accident.distinct("Make_Model").exec().catch(next);
+    res.status(200).json(makeModels);
+});
+router.get("/make_model/:makeModel", async function (req, res, next) {
+    const { makeModel } = req.params;
+    let makeModels = [];
+    try {
+        makeModels = await Accident.distinct("Make_Model", {
+            Make_Model: new RegExp(`^${makeModel}`, "i"),
+        }).exec();
+    } catch (err) {
+        console.error(err);
     }
-  });
-  res.status(200).json(models);
+    res.status(200).json(makeModels);
 });
 
 router.get("/makeList", async function (req, res, next) {
-  let makes = await Accident.distinct("Make").exec().catch(next);
+  let makes = [];
+  try {
+    makes = await Accident.distinct("Make", { Final_Report_PDF: { $exists: true }}).exec();
+  } catch (err) {
+    console.error(err);
+  }
   res.status(200).json(makes);
 });
 
 router.get("/makeList/:make", async function (req, res, next) {
   const { make } = req.params;
+  const makeRegex = new RegExp(`^${escapeRegex(make)}`, "i");
   let makes = [];
-  let allMakes = [];
   try {
-    allMakes = await Accident.distinct("Make").exec();
+    makes = await Accident.distinct("Model", {
+        Make: makeRegex,
+        Final_Report_PDF: { $exists: true }
+    }).exec();
   } catch (err) {
-    console.error(err);
+      console.error(err);
   }
-  allMakes.forEach((m) => {
-    if (new RegExp(`^${make}`, "i").test(m)) {
-      makes.push(m);
-    }
-  });
   res.status(200).json(makes);
 });
+
 router.get("/countryList/:country", async function (req, res) {
   const { country } = req.params;
   let countries = [];
-  let allCountries = [];
   try {
-    allCountries = await Accident.distinct("Country").exec();
+    countries = await Accident.distinct("Country", {
+        Country: new RegExp(`^${country}`, "i"),
+    }).exec();
   } catch (err) {
-    console.error(err);
+      console.error(err);
   }
-  allCountries.forEach((c) => {
-    if (new RegExp(`^${country}`, "i").test(c)) {
-      countries.push(c);
-    }
-  });
   res.status(200).json(countries);
 });
+
 router.get("/cityList/:city", async function (req, res, next) {
   const { city } = req.params;
   let cities = [];
-  let allCities = await Accident.distinct("City").exec().catch(next);
-  allCities.forEach((c) => {
-    if (new RegExp(city, "i").test(c)) {
-      cities.push(c);
-    }
-  });
+  try {
+      cities = await Accident.distinct("City", {
+          City: new RegExp(city, "i"),
+      }).exec();
+  } catch (err) {
+        console.error(err);
+  }
   res.status(200).json(cities);
 });
 
@@ -103,10 +134,15 @@ router.get("/makes/:make", async function (req, res, next) {
 });
 
 async function getAccidents(req, res, next) {
-  const accidentsPerPage = 50;
+  const accidentsPerPage = 20;
   const { page = 0 } = req.query;
   delete req.query.page;
   const { query = {} } = req;
+  if (!query.Final_Report_PDF) {
+    query.Final_Report_PDF = { ...query.Final_Report_PDF, $exists: true }
+  } else {
+    query.Final_Report_PDF = { $exists: true }
+  }
   if (query.Event_Date) {
     query.Event_Date = new Date(query.Event_Date);
   }
@@ -124,6 +160,14 @@ async function getAccidents(req, res, next) {
         : { $gte: new Date(query.after) }),
     };
   }
+  if (query.Make) {
+    let makeRegex = new RegExp(`^${escapeRegex(query.Make)}`, "i");
+    query.Make = makeRegex;
+  }
+  if (query.Model) {
+    let modelRegex = new RegExp(`^${escapeRegex(query.Model)}`, "i");
+    query.Model = modelRegex;
+  }
   const sort = req.sort || { Event_Date: 1 };
 
   let accidentList, totalAccidents, totalPages;
@@ -134,10 +178,11 @@ async function getAccidents(req, res, next) {
       .skip(accidentsPerPage * page)
       .exec();
     totalAccidents =
-      page === 0 ? await Accident.countDocuments(query) : undefined;
+        +page === 0 ? await Accident.countDocuments(query) : undefined;
     totalPages = totalAccidents
       ? Math.floor(totalAccidents / accidentsPerPage)
       : undefined;
+      console.log(totalAccidents, totalPages)
   } catch (err) {
     console.error(err);
   }
@@ -146,8 +191,8 @@ async function getAccidents(req, res, next) {
     page: +page,
     filters: query,
     entries_per_page: accidentsPerPage,
-    ...(totalAccidents && { total_results: totalAccidents }),
-    ...(totalPages && { total_pages: totalPages }),
+    ...(totalAccidents !== undefined && { total_results: totalAccidents }),
+    ...(totalPages !== undefined && { total_pages: totalPages }),
   };
   res.json(response);
 }
