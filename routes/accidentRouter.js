@@ -39,15 +39,26 @@ router.get("/category/:category", async function (req, res, next) {
 })
 
 router.get("/make_model", async function (req, res, next) {
-    let makeModels = await Accident.distinct("Make_Model").exec().catch(next);
+    let makeModels = [];
+    try {
+        makeModels = await Accident.distinct("Make_Model", {
+            Final_Report_PDF: { $exists: true },
+        })
+            .collation({ locale: "en", strength: 2 })
+            .exec();
+    } catch (err) {
+        console.error(err);
+    }
+    
     res.status(200).json(makeModels);
 });
 router.get("/make_model/:makeModel", async function (req, res, next) {
     const { makeModel } = req.params;
     let makeModels = [];
     try {
-        makeModels = await Accident.distinct("Make_Model", {
+        makeModels = await Accident.find({
             Make_Model: new RegExp(`^${makeModel}`, "i"),
+            Final_Report_PDF: { $exists: true },
         }).exec();
     } catch (err) {
         console.error(err);
@@ -134,65 +145,71 @@ router.get("/makes/:make", async function (req, res, next) {
 });
 
 async function getAccidents(req, res, next) {
-  const accidentsPerPage = 20;
+  const accidentsPerPage = 15;
   const { page = 0 } = req.query;
-  delete req.query.page;
   const { query = {} } = req;
+  const sanitizedQuery = {};
   if (!query.Final_Report_PDF) {
-    query.Final_Report_PDF = { ...query.Final_Report_PDF, $exists: true }
+    sanitizedQuery.Final_Report_PDF = {
+        ...query.Final_Report_PDF,
+        $exists: true,
+    };
   } else {
-    query.Final_Report_PDF = { $exists: true }
+    sanitizedQuery.Final_Report_PDF = { $exists: true };
   }
   if (query.Event_Date) {
-    query.Event_Date = new Date(query.Event_Date);
+    sanitizedQuery.Event_Date = new Date(query.Event_Date);
   }
   if (query.before) {
-    query.Event_Date = {
-      ...(query.Event_Date
-        ? { ...query.Event_Date, $lt: new Date(query.before) }
-        : { $lt: new Date(query.before) }),
+    sanitizedQuery.Event_Date = {
+        ...(sanitizedQuery.Event_Date
+            ? { ...sanitizedQuery.Event_Date, $lt: new Date(query.before) }
+            : { $lt: new Date(query.before) }),
     };
   }
   if (query.after) {
-    query.Event_Date = {
-      ...(query.Event_Date
-        ? { ...query.Event_Date, $gte: new Date(query.after) }
-        : { $gte: new Date(query.after) }),
+    sanitizedQuery.Event_Date = {
+        ...(sanitizedQuery.Event_Date
+            ? { ...sanitizedQuery.Event_Date, $gte: new Date(query.after) }
+            : { $gte: new Date(query.after) }),
     };
   }
   if (query.Make) {
     let makeRegex = new RegExp(`^${escapeRegex(query.Make)}`, "i");
-    query.Make = makeRegex;
+    sanitizedQuery.Make = makeRegex;
   }
   if (query.Model) {
-    let modelRegex = new RegExp(`^${escapeRegex(query.Model)}`, "i");
-    query.Model = modelRegex;
+      let modelRegex = new RegExp(`^${escapeRegex(query.Model)}`, "i");
+      sanitizedQuery.Model = modelRegex;
+  }
+  if (query.Make_Model) {
+      let makeModelRegex = new RegExp(`^${escapeRegex(query.Make_Model)}`, "i");
+      sanitizedQuery.Make_Model = makeModelRegex;
   }
   const sort = req.sort || { Event_Date: 1 };
 
   let accidentList, totalAccidents, totalPages;
   try {
-    accidentList = await Accident.find(query)
-      .sort(sort)
-      .limit(accidentsPerPage)
-      .skip(accidentsPerPage * page)
-      .exec();
+    accidentList = await Accident.find(sanitizedQuery)
+        .sort(sort)
+        .limit(accidentsPerPage)
+        .skip(accidentsPerPage * page)
+        .exec();
     totalAccidents =
-        +page === 0 ? await Accident.countDocuments(query) : undefined;
+        +page === 0 ? await Accident.countDocuments(sanitizedQuery) : undefined;
     totalPages = totalAccidents
-      ? Math.floor(totalAccidents / accidentsPerPage)
-      : undefined;
-      console.log(totalAccidents, totalPages)
+        ? Math.floor(totalAccidents / accidentsPerPage)
+        : undefined;
   } catch (err) {
     console.error(err);
   }
   const response = {
-    accidents: accidentList,
-    page: +page,
-    filters: query,
-    entries_per_page: accidentsPerPage,
-    ...(totalAccidents !== undefined && { total_results: totalAccidents }),
-    ...(totalPages !== undefined && { total_pages: totalPages }),
+      accidents: accidentList,
+      page: +page,
+      filters: sanitizedQuery,
+      entries_per_page: accidentsPerPage,
+      ...(totalAccidents !== undefined && { total_results: totalAccidents }),
+      ...(totalPages !== undefined && { total_pages: totalPages }),
   };
   res.json(response);
 }
