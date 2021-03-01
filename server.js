@@ -23,7 +23,7 @@ mongoose.connect(mongoURI, connectOptions, (err, db) => {
 
 const server = express();
 server.use(express.json());
-server.use(cors({ origin: "*" }));
+server.use(cors({ origin: process.env.REACT_APP_ENDPOINT }));
 server.use(function (req, res, next) {
   if (req.method === "OPTIONS") {
     res.status(200).end();
