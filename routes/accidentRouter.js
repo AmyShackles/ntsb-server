@@ -271,7 +271,10 @@ router.get("/numberOfEngines/:number", async function (req, res) {
                         { Final_Report_PDF: { $exists: true } },
                         { Foreign_Report: { $exists: true } },
                     ],
-                    Number_of_Engines: new RegExp(`^{escapeRegex(number)}`, "i"),
+                    Number_of_Engines: new RegExp(
+                        `^${escapeRegex(number)}`,
+                        "i"
+                    ),
                 }
             )
                 .collation({ locale: "en", strength: 2 })
